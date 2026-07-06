@@ -7,6 +7,7 @@ import io
 import re
 import PyPDF2
 import docx
+import ai_engine
 
 st.set_page_config(page_title="LearnLoop", layout="wide", page_icon="📚")
 
