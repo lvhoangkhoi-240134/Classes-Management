@@ -8,28 +8,27 @@ def generate_smart_mcqs(text, num_questions, api_key):
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
-        Bạn là một chuyên gia giáo dục. Hãy tạo ra đúng {num_questions} câu hỏi trắc nghiệm (MCQ) khó từ văn bản này.
-        Mỗi câu phải có 4 đáp án (A, B, C, D) và 1 giải thích.
+        Bạn là chuyên gia giáo dục. Dựa vào nội dung dưới, hãy tạo {num_questions} câu trắc nghiệm khó.
+        Yêu cầu bắt buộc:
+        1. Trả về đúng định dạng JSON: [{"q": "...", "options": ["A. ...", ...], "answer": "...", "explanation": "..."}]
+        2. KHÔNG ĐƯỢC thêm bất kỳ lời dẫn hay ký tự nào ngoài mảng JSON này.
+        3. Đáp án phải có định dạng "A. Nội dung", "B. Nội dung", ...
         
-        TRẢ VỀ ĐÚNG DẠNG JSON (không thêm text ngoài):
-        [
-          {{"q": "Câu hỏi?", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A. ...", "explanation": "..."}}
-        ]
-        
-        Văn bản: {text[:15000]} 
+        Nội dung: {text[:20000]}
         """
         
         response = model.generate_content(prompt)
         raw_text = response.text.strip()
         
-        # CHỖ NÀY LÀ CỨU TINH: Dùng Regex tìm đoạn JSON trong phản hồi
-        json_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
-        if json_match:
-            json_text = json_match.group(0)
-            return json.loads(json_text)
+        # TÌM ĐOẠN DỮ LIỆU CÓ DẤU [ và ]
+        start = raw_text.find('[')
+        end = raw_text.rfind(']') + 1
+        
+        if start != -1 and end != -1:
+            clean_json = raw_text[start:end]
+            return json.loads(clean_json)
         else:
-            # Nếu không tìm thấy JSON, ném lỗi để app biết
-            raise ValueError("AI did not return valid JSON format.")
+            raise ValueError("Không tìm thấy cấu trúc mảng [...] trong phản hồi của AI.")
 
     except Exception as e:
-        return {"error": f"AI Parsing Error: {str(e)}"}
+        return {"error": f"Lỗi xử lý dữ liệu: {str(e)}"}
