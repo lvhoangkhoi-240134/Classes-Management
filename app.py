@@ -10,6 +10,12 @@ if 'decks' not in st.session_state:
     st.session_state.decks = []
 if 'classes' not in st.session_state:
     st.session_state.classes = []
+if 'students' not in st.session_state:
+    st.session_state.students = []
+if 'score' not in st.session_state:
+    st.session_state.score = 0
+if 'mcq_generated' not in st.session_state:
+    st.session_state.mcq_generated = False
 if 'mock_progress' not in st.session_state:
     st.session_state.mock_progress = pd.DataFrame({
         'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
@@ -26,12 +32,26 @@ def main():
     st.sidebar.title("Login / Roles")
     role = st.sidebar.selectbox("Who are you?", ["Student", "Teacher"])
     
+    user_name = st.sidebar.text_input("Enter your full name:")
+    
+    if role == "Student":
+        invite_code = st.sidebar.text_input("Enter Class Invite Code (Optional):")
+        if st.sidebar.button("Login as Student") and user_name:
+            student_exists = any(s['name'] == user_name for s in st.session_state.students)
+            if not student_exists:
+                st.session_state.students.append({"name": user_name, "code": invite_code})
+            st.sidebar.success(f"Logged in as {user_name}")
+            
+    elif role == "Teacher":
+        if st.sidebar.button("Login as Teacher") and user_name:
+            st.sidebar.success(f"Logged in as Professor {user_name}")
+
     st.divider()
 
-    if role == "Student":
-        st.header("🎓 Student Dashboard")
+    if role == "Student" and user_name:
+        st.header(f"🎓 Student Dashboard: {user_name}")
         
-        tab1, tab2, tab3 = st.tabs(["My Decks", "Study Session", "Progress"])
+        tab1, tab2, tab3 = st.tabs(["My Decks", "Study Session (AI MCQ)", "Progress"])
         
         with tab1:
             st.subheader("Create New Deck")
@@ -56,29 +76,49 @@ def main():
                 st.write("No decks found. Please create one.")
 
         with tab2:
-            st.subheader("Study Session")
-            if st.button("Start Review (Due Cards Only)", type="primary"):
-                st.write("Fetching cards where next_review_date <= today...")
+            st.subheader("AI-Powered Study Session")
+            st.markdown(f"### 🏆 Current Score: **{st.session_state.score}**")
+            
+            uploaded_file = st.file_uploader("Upload your lesson document (TXT, PDF, DOCX)", type=["txt", "pdf", "docx"])
+            
+            if uploaded_file is not None:
+                if st.button("Generate AI MCQs", type="primary"):
+                    with st.spinner("AI is analyzing the document and generating questions..."):
+                        st.session_state.mcq_generated = True
+                        
+            if st.session_state.mcq_generated:
+                st.success("MCQs generated successfully based on your file!")
+                st.markdown("---")
+                st.markdown("#### Question 1")
+                st.write("Based on the uploaded document, which of the following best describes the core function of a CPU?")
                 
-                st.markdown("### Card 1: Fill in the gap")
-                st.write("**Front:** The {CPU} is the brain of the computer.")
+                options = [
+                    "A. Storing permanent data for the system.",
+                    "B. Acting as the brain of the computer to process instructions.",
+                    "C. Cooling down the motherboard.",
+                    "D. Providing graphical output to the monitor."
+                ]
                 
-                if st.button("Show Answer"):
-                    st.success("**Back:** CPU")
-                    st.write("Rate your difficulty to schedule the next review:")
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.button("0 - Again")
-                    col2.button("1 - Hard")
-                    col3.button("2 - Good")
-                    col4.button("3 - Easy")
+                answer = st.radio("Select your answer:", options, index=None)
+                
+                if st.button("Submit Answer"):
+                    if answer == options[1]:
+                        st.success("✅ Correct! +1 Point.")
+                        st.session_state.score += 1
+                        st.session_state.mcq_generated = False
+                    elif answer is not None:
+                        st.error("❌ Incorrect.")
+                        st.info("**Explanation:** The document explicitly states that the CPU (Central Processing Unit) acts as the brain of the computer, handling all logic and instruction processing. Storage is handled by hard drives, and graphics by the GPU.")
+                    else:
+                        st.warning("Please select an answer first.")
 
         with tab3:
             st.subheader("My Progress Analytics")
             st.write("Accuracy percentage over time:")
             st.line_chart(st.session_state.mock_progress)
 
-    elif role == "Teacher":
-        st.header("👨‍🏫 Teacher Dashboard")
+    elif role == "Teacher" and user_name:
+        st.header(f"👨‍🏫 Teacher Dashboard: {user_name}")
         
         tab1, tab2 = st.tabs(["Class Management", "Student Analytics"])
         
@@ -104,14 +144,23 @@ def main():
             st.subheader("Student Progress Analytics")
             if st.session_state.classes:
                 selected_class = st.selectbox("Select Class", [c['name'] for c in st.session_state.classes])
-                st.write(f"Viewing analytics for class: **{selected_class}**")
+                class_code = next(c['code'] for c in st.session_state.classes if c['name'] == selected_class)
                 
-                st.markdown("---")
-                st.write("**Student:** Tran Thi Bao Ngan")
-                st.write("**Last active:** Today")
-                st.line_chart(st.session_state.mock_progress)
+                enrolled_students = [s['name'] for s in st.session_state.students if s['code'] == class_code]
+                
+                if enrolled_students:
+                    selected_student = st.selectbox("Select Student", enrolled_students)
+                    st.markdown("---")
+                    st.write(f"**Viewing analytics for:** {selected_student}")
+                    st.write("**Last active:** Today")
+                    st.line_chart(st.session_state.mock_progress)
+                else:
+                    st.info("No students have joined this class using the invite code yet.")
             else:
                 st.warning("Please create a class first to view student analytics.")
+                
+    elif not user_name:
+        st.info("👈 Please enter your name in the sidebar and click Login to access your dashboard.")
 
 if __name__ == '__main__':
     main()
