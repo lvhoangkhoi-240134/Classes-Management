@@ -1,51 +1,35 @@
 import google.generativeai as genai
 import json
+import re
 
 def generate_smart_mcqs(text, num_questions, api_key):
-    """
-    Hàm này gửi văn bản lên Google Gemini và yêu cầu trả về bộ câu hỏi hóc búa
-    dưới định dạng JSON để Streamlit dễ dàng hiển thị.
-    """
     try:
-        # Cấu hình chìa khóa API
         genai.configure(api_key=api_key)
-        
-        # Sử dụng model Gemini 1.5 Flash (nhanh và thông minh)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        # Đây chính là "Super Prompt" để ép AI làm câu hỏi khó
         prompt = f"""
-        Bạn là một giáo sư đại học khắt khe. Dựa vào văn bản dưới đây, hãy tạo ra đúng {num_questions} câu hỏi trắc nghiệm (MCQ) khó, đòi hỏi tư duy phân tích, suy luận logic chứ không chỉ copy chữ từ văn bản.
-        Mỗi câu hỏi phải có 4 đáp án (chỉ 1 đáp án đúng) và 1 lời giải thích chi tiết tại sao các đáp án khác sai.
+        Bạn là một chuyên gia giáo dục. Hãy tạo ra đúng {num_questions} câu hỏi trắc nghiệm (MCQ) khó từ văn bản này.
+        Mỗi câu phải có 4 đáp án (A, B, C, D) và 1 giải thích.
         
-        BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON DƯỚI ĐÂY (không thêm bất kỳ text nào khác, không dùng markdown ```json):
+        TRẢ VỀ ĐÚNG DẠNG JSON (không thêm text ngoài):
         [
-          {{
-            "q": "Câu hỏi suy luận...",
-            "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-            "answer": "A. ...", 
-            "explanation": "Giải thích chi tiết dựa trên nội dung..."
-          }}
+          {{"q": "Câu hỏi?", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A. ...", "explanation": "..."}}
         ]
         
-        VĂN BẢN BÀI HỌC:
-        {text}
+        Văn bản: {text[:15000]} 
         """
         
-        # Gửi yêu cầu lên Google
         response = model.generate_content(prompt)
-        
-        # Lấy kết quả và chuyển từ dạng Text sang mảng JSON (Dictionary)
         raw_text = response.text.strip()
         
-        # Xử lý nếu AI lỡ trả về kèm markdown
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:-3].strip()
-        elif raw_text.startswith("```"):
-            raw_text = raw_text[3:-3].strip()
-            
-        questions = json.loads(raw_text)
-        return questions
+        # CHỖ NÀY LÀ CỨU TINH: Dùng Regex tìm đoạn JSON trong phản hồi
+        json_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
+        if json_match:
+            json_text = json_match.group(0)
+            return json.loads(json_text)
+        else:
+            # Nếu không tìm thấy JSON, ném lỗi để app biết
+            raise ValueError("AI did not return valid JSON format.")
 
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"AI Parsing Error: {str(e)}"}
