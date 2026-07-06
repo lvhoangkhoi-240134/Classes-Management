@@ -3,6 +3,10 @@ import pandas as pd
 import random
 import string
 from datetime import datetime
+import io
+import re
+import PyPDF2
+import docx
 
 st.set_page_config(page_title="LearnLoop", layout="wide", page_icon="📚")
 
@@ -12,18 +16,71 @@ if 'classes' not in st.session_state:
     st.session_state.classes = []
 if 'students' not in st.session_state:
     st.session_state.students = []
-if 'score' not in st.session_state:
-    st.session_state.score = 0
-if 'mcq_generated' not in st.session_state:
-    st.session_state.mcq_generated = False
-if 'mock_progress' not in st.session_state:
-    st.session_state.mock_progress = pd.DataFrame({
-        'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-        'Accuracy (%)': [45, 55, 60, 75, 82, 90]
-    }).set_index('Month')
+if 'session_history' not in st.session_state:
+    st.session_state.session_history = []
+if 'current_exam' not in st.session_state:
+    st.session_state.current_exam = None
+if 'exam_start_time' not in st.session_state:
+    st.session_state.exam_start_time = None
 
 def generate_invite_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+def extract_text_from_file(uploaded_file):
+    text = ""
+    if uploaded_file.name.endswith('.txt'):
+        text = uploaded_file.read().decode('utf-8')
+    elif uploaded_file.name.endswith('.pdf'):
+        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+        for page in pdf_reader.pages:
+            text += page.extract_text() + " "
+    elif uploaded_file.name.endswith('.docx'):
+        doc = docx.Document(uploaded_file)
+        for para in doc.paragraphs:
+            text += para.text + " "
+    return text
+
+def generate_ai_mcqs(text, num_questions):
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    valid_sentences = [s.strip() for s in sentences if len(s.split()) > 10]
+    
+    if len(valid_sentences) == 0:
+        return []
+        
+    if len(valid_sentences) < num_questions:
+        valid_sentences = valid_sentences * (num_questions // len(valid_sentences) + 1)
+        
+    selected_sentences = random.sample(valid_sentences, num_questions)
+    all_words = list(set(re.findall(r'\b[a-zA-Z]{5,}\b', text)))
+    
+    if len(all_words) < 10:
+        all_words += ["Concept", "Process", "System", "Analysis", "Data", "Method", "Theory", "Application"]
+        
+    questions = []
+    for s in selected_sentences:
+        words_in_s = [w for w in s.split() if len(w) > 4 and w.isalpha()]
+        if not words_in_s:
+            continue
+            
+        answer = random.choice(words_in_s)
+        question_text = s.replace(answer, "________", 1)
+        
+        options = [answer]
+        attempts = 0
+        while len(options) < 4 and attempts < 20:
+            distractor = random.choice(all_words)
+            if distractor not in options and distractor.lower() != answer.lower():
+                options.append(distractor)
+            attempts += 1
+            
+        random.shuffle(options)
+        questions.append({
+            "q": question_text,
+            "options": options,
+            "answer": answer,
+            "original_sentence": s
+        })
+    return questions
 
 def main():
     st.title("📚 LearnLoop")
@@ -51,7 +108,7 @@ def main():
     if role == "Student" and user_name:
         st.header(f"🎓 Student Dashboard: {user_name}")
         
-        tab1, tab2, tab3 = st.tabs(["My Decks", "Study Session (AI MCQ)", "Progress"])
+        tab1, tab2, tab3 = st.tabs(["My Decks", "AI Study Session", "Progress"])
         
         with tab1:
             st.subheader("Create New Deck")
@@ -73,49 +130,113 @@ def main():
                 for d in st.session_state.decks:
                     st.info(f"**{d['title']}**\n\n{d['desc']}\n\n*Created on: {d['date']}*")
             else:
-                st.write("No decks found. Please create one.")
+                st.write("No decks found.")
 
         with tab2:
-            st.subheader("AI-Powered Study Session")
-            st.markdown(f"### 🏆 Current Score: **{st.session_state.score}**")
+            st.subheader("AI-Powered Exam Session")
             
-            uploaded_file = st.file_uploader("Upload your lesson document (TXT, PDF, DOCX)", type=["txt", "pdf", "docx"])
-            
-            if uploaded_file is not None:
-                if st.button("Generate AI MCQs", type="primary"):
-                    with st.spinner("AI is analyzing the document and generating questions..."):
-                        st.session_state.mcq_generated = True
+            if st.session_state.current_exam is None:
+                col1, col2 = st.columns(2)
+                with col1:
+                    num_qs = st.selectbox("Number of Questions", [5, 10, 20, 50, 100])
+                with col2:
+                    uploaded_file = st.file_uploader("Upload lesson material (TXT, PDF, DOCX)", type=["txt", "pdf", "docx"])
+                
+                if uploaded_file is not None:
+                    if st.button("Generate & Start Session", type="primary"):
+                        with st.spinner("Reading file and generating questions..."):
+                            raw_text = extract_text_from_file(uploaded_file)
+                            generated_qs = generate_ai_mcqs(raw_text, num_qs)
+                            
+                            if generated_qs:
+                                st.session_state.current_exam = generated_qs
+                                st.session_state.exam_start_time = datetime.now()
+                                st.rerun()
+                            else:
+                                st.error("Could not generate questions. The file might be empty or contain too little text.")
+            else:
+                st.warning("Exam in progress! Do not refresh the page.")
+                
+                with st.form("exam_form"):
+                    user_answers = {}
+                    for i, q in enumerate(st.session_state.current_exam):
+                        st.markdown(f"**Q{i+1}:** {q['q']}")
+                        user_answers[i] = st.radio(f"Options for Q{i+1}", q['options'], key=f"q_{i}", index=None, label_visibility="collapsed")
+                        st.markdown("---")
                         
-            if st.session_state.mcq_generated:
-                st.success("MCQs generated successfully based on your file!")
-                st.markdown("---")
-                st.markdown("#### Question 1")
-                st.write("Based on the uploaded document, which of the following best describes the core function of a CPU?")
+                    submit_exam = st.form_submit_button("Submit Exam")
+                    
+                    if submit_exam:
+                        end_time = datetime.now()
+                        time_taken = end_time - st.session_state.exam_start_time
+                        minutes, seconds = divmod(time_taken.total_seconds(), 60)
+                        
+                        score = 0
+                        results_ui = []
+                        
+                        for i, q in enumerate(st.session_state.current_exam):
+                            is_correct = user_answers[i] == q['answer']
+                            if is_correct:
+                                score += 1
+                                results_ui.append((f"✅ Q{i+1}: Correct!", "success", ""))
+                            else:
+                                results_ui.append((f"❌ Q{i+1}: Incorrect. You chose '{user_answers[i]}'. Correct answer: '{q['answer']}'", "error", f"Explanation: Based on the text -> '{q['original_sentence']}'"))
+                        
+                        total_qs = len(st.session_state.current_exam)
+                        accuracy = (score / total_qs) * 100
+                        
+                        session_data = {
+                            "student": user_name,
+                            "session_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "score": score,
+                            "total": total_qs,
+                            "accuracy": accuracy,
+                            "time_taken": f"{int(minutes)}m {int(seconds)}s"
+                        }
+                        st.session_state.session_history.append(session_data)
+                        
+                        st.session_state.last_exam_results = {
+                            "score": score,
+                            "total": total_qs,
+                            "time": f"{int(minutes)}m {int(seconds)}s",
+                            "details": results_ui
+                        }
+                        
+                        st.session_state.current_exam = None
+                        st.session_state.exam_start_time = None
+                        st.rerun()
+                        
+            if 'last_exam_results' in st.session_state and st.session_state.current_exam is None:
+                res = st.session_state.last_exam_results
+                st.success(f"### Exam Completed!\n**Final Score:** {res['score']}/{res['total']}\n**Time Taken:** {res['time']}")
                 
-                options = [
-                    "A. Storing permanent data for the system.",
-                    "B. Acting as the brain of the computer to process instructions.",
-                    "C. Cooling down the motherboard.",
-                    "D. Providing graphical output to the monitor."
-                ]
+                with st.expander("View Detailed Results & Explanations"):
+                    for title, status, explanation in res['details']:
+                        if status == "success":
+                            st.success(title)
+                        else:
+                            st.error(title)
+                            st.info(explanation)
                 
-                answer = st.radio("Select your answer:", options, index=None)
-                
-                if st.button("Submit Answer"):
-                    if answer == options[1]:
-                        st.success("✅ Correct! +1 Point.")
-                        st.session_state.score += 1
-                        st.session_state.mcq_generated = False
-                    elif answer is not None:
-                        st.error("❌ Incorrect.")
-                        st.info("**Explanation:** The document explicitly states that the CPU (Central Processing Unit) acts as the brain of the computer, handling all logic and instruction processing. Storage is handled by hard drives, and graphics by the GPU.")
-                    else:
-                        st.warning("Please select an answer first.")
+                if st.button("Start New Session"):
+                    del st.session_state.last_exam_results
+                    st.rerun()
 
         with tab3:
             st.subheader("My Progress Analytics")
-            st.write("Accuracy percentage over time:")
-            st.line_chart(st.session_state.mock_progress)
+            user_sessions = [s for s in st.session_state.session_history if s['student'] == user_name]
+            
+            if user_sessions:
+                df = pd.DataFrame(user_sessions)
+                df['Session'] = [f"Session {i+1}" for i in range(len(df))]
+                
+                st.write("**Accuracy Over Recent Sessions (%)**")
+                st.line_chart(df.set_index('Session')['accuracy'])
+                
+                st.write("**Session History Log**")
+                st.dataframe(df[['session_date', 'score', 'total', 'accuracy', 'time_taken']])
+            else:
+                st.info("Complete an AI Study Session to generate your progress chart.")
 
     elif role == "Teacher" and user_name:
         st.header(f"👨‍🏫 Teacher Dashboard: {user_name}")
@@ -152,8 +273,16 @@ def main():
                     selected_student = st.selectbox("Select Student", enrolled_students)
                     st.markdown("---")
                     st.write(f"**Viewing analytics for:** {selected_student}")
-                    st.write("**Last active:** Today")
-                    st.line_chart(st.session_state.mock_progress)
+                    
+                    student_sessions = [s for s in st.session_state.session_history if s['student'] == selected_student]
+                    
+                    if student_sessions:
+                        df_teacher = pd.DataFrame(student_sessions)
+                        df_teacher['Session'] = [f"Session {i+1}" for i in range(len(df_teacher))]
+                        st.line_chart(df_teacher.set_index('Session')['accuracy'])
+                        st.dataframe(df_teacher[['session_date', 'score', 'total', 'accuracy', 'time_taken']])
+                    else:
+                        st.info("This student has not completed any study sessions yet.")
                 else:
                     st.info("No students have joined this class using the invite code yet.")
             else:
