@@ -131,7 +131,7 @@ def main():
                 else:
                     database.create_class(name, user_name, custom_code)
                     st.success(f"Class '{name}' created! Invite Code: {custom_code}")
-                    # XÓA KHỎI BỘ NHỚ VÀ RERUN TRANG LÀ CÁCH FIX SẠCH NHẤT
+                    
                     if 'class_code_input' in st.session_state:
                         del st.session_state['class_code_input']
                     st.rerun()
