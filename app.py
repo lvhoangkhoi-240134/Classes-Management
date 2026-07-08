@@ -3,7 +3,6 @@ import pandas as pd
 import ai_engine
 import database
 from datetime import datetime
-import io
 import PyPDF2
 import docx
 
@@ -30,144 +29,108 @@ def extract_text_from_file(uploaded_file):
             text += para.text + " "
     return text
 
+def generate_random_code():
+    import random, string
+    st.session_state.class_code_input = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
 def main():
     st.title("📚 LearnLoop")
     st.sidebar.title("Login / Roles")
     
     role = st.sidebar.selectbox("Who are you?", ["Student", "Teacher"])
     user_name = st.sidebar.text_input("Full Name:")
-    api_key = st.sidebar.text_input("Google Gemini API Key:", type="password")
+    api_key = st.sidebar.text_input("Gemini API Key:", type="password")
     
     if role == "Student":
-        code = st.sidebar.text_input("Class Invite Code (Optional):")
-        if st.sidebar.button("Login as Student"):
+        code = st.sidebar.text_input("Class Invite Code:")
+        if st.sidebar.button("Login"):
             if user_name:
-                if code:
-                    database.enroll_student(user_name, code)
+                database.enroll_student(user_name, code)
                 st.sidebar.success(f"Logged in as {user_name}")
-            else:
-                st.sidebar.error("Please enter your name.")
 
     if not user_name:
-        st.info("👈 Please enter your name in the sidebar to start.")
+        st.info("👈 Please enter your name to start.")
         return
 
     if role == "Student":
         st.header(f"🎓 Dashboard: {user_name}")
-        tab1, tab2 = st.tabs(["AI Study Session", "Progress Analytics"])
+        tab1, tab2 = st.tabs(["AI Study Session", "Progress"])
         
         with tab1:
             if st.session_state.current_exam is None:
-                col1, col2 = st.columns(2)
-                with col1:
-                    num_qs = st.selectbox("Number of Questions", [5, 10, 20, 50])
-                with col2:
-                    uploaded_file = st.file_uploader("Upload material (TXT, PDF, DOCX)", type=["txt", "pdf", "docx"])
+                num_qs = st.selectbox("Number of Questions", [5, 10, 20])
+                uploaded_file = st.file_uploader("Upload material", type=["txt", "pdf", "docx"])
                 
-                if uploaded_file and st.button("Generate & Start Exam", type="primary"):
+                if uploaded_file and st.button("Start Exam"):
                     if not api_key:
-                        st.error("Missing Google Gemini API Key in the sidebar!")
+                        st.error("Missing API Key!")
                     else:
-                        with st.spinner(f"AI is analyzing your file and crafting {num_qs} questions..."):
+                        with st.spinner("AI is analyzing..."):
                             raw_text = extract_text_from_file(uploaded_file)
                             qs = ai_engine.generate_smart_mcqs(raw_text, num_qs, api_key)
-                            
-                            if isinstance(qs, dict) and "error" in qs:
-                                st.error(qs["error"])
-                            elif isinstance(qs, list) and len(qs) > 0:
+                            if isinstance(qs, list):
                                 st.session_state.current_exam = qs
                                 st.session_state.exam_start_time = datetime.now()
                                 st.rerun()
                             else:
-                                st.error("Unknown error occurred while generating questions.")
+                                st.error(qs.get("error", "Failed to generate."))
             else:
-                exam_data = st.session_state.current_exam
-                if not isinstance(exam_data, list) or len(exam_data) == 0 or not isinstance(exam_data[0], dict):
-                    st.error("Question data structure is corrupted. Please clear and regenerate.")
-                    if st.button("Clear Corrupted Session"):
+                with st.form("exam_form"):
+                    user_answers = {}
+                    for i, q in enumerate(st.session_state.current_exam):
+                        st.markdown(f"**Q{i+1}:** {q.get('q')}")
+                        user_answers[i] = st.radio("Options", q.get('options'), key=f"q_{i}", index=None, label_visibility="collapsed")
+                    
+                    if st.form_submit_button("Submit"):
+                        score = sum(1 for i, q in enumerate(st.session_state.current_exam) if user_answers.get(i) == q.get('answer'))
+                        time_taken = str(datetime.now() - st.session_state.exam_start_time)
+                        database.save_session(user_name, (score/len(st.session_state.current_exam))*100, score, len(st.session_state.current_exam), time_taken)
+                        st.session_state.last_res = {"score": score, "total": len(st.session_state.current_exam), "details": st.session_state.current_exam, "answers": user_answers}
                         st.session_state.current_exam = None
                         st.rerun()
-                else:
-                    st.warning("Exam in progress! Do not refresh the page.")
-                    with st.form("exam_form"):
-                        user_answers = {}
-                        for i, q in enumerate(exam_data):
-                            st.markdown(f"**Q{i+1}:** {q.get('q', 'Error reading question')}")
-                            options = q.get('options', [])
-                            user_answers[i] = st.radio(
-                                f"Options for Q{i+1}", 
-                                options, 
-                                key=f"q_{i}", 
-                                index=None, 
-                                label_visibility="collapsed"
-                            )
-                            st.markdown("---")
-                        
-                        submit_exam = st.form_submit_button("Submit Exam")
-                        if submit_exam:
-                            score = 0
-                            total = len(exam_data)
-                            
-                            for i, q in enumerate(exam_data):
-                                if user_answers.get(i) == q.get('answer'):
-                                    score += 1
-                                    
-                            time_taken = datetime.now() - st.session_state.exam_start_time
-                            minutes, seconds = divmod(time_taken.total_seconds(), 60)
-                            time_str = f"{int(minutes)}m {int(seconds)}s"
-                            accuracy = (score / total) * 100 if total > 0 else 0
-                            
-                            database.save_session(user_name, accuracy, score, total, time_str)
-                            
-                            st.session_state.last_result = {
-                                "score": score, 
-                                "total": total, 
-                                "time": time_str,
-                                "details": exam_data, 
-                                "answers": user_answers
-                            }
-                            st.session_state.current_exam = None
-                            st.rerun()
 
-            if 'last_result' in st.session_state and st.session_state.current_exam is None:
-                res = st.session_state.last_result
-                st.success(f"### Exam Completed!\n**Score:** {res['score']}/{res['total']} | **Time Taken:** {res['time']}")
-                
-                with st.expander("View Explanations & Corrections"):
-                    for i, q in enumerate(res['details']):
-                        user_ans = res['answers'].get(i)
-                        correct_ans = q.get('answer')
-                        if user_ans == correct_ans:
-                            st.success(f"✅ Q{i+1}: Correct!")
-                        else:
-                            st.error(f"❌ Q{i+1}: Incorrect. You chose '{user_ans}'. Correct: '{correct_ans}'.")
-                            st.info(f"**Explanation:** {q.get('explanation', 'No explanation provided.')}")
-                
-                if st.button("Start New Session"):
-                    del st.session_state.last_result
+            if 'last_res' in st.session_state:
+                res = st.session_state.last_res
+                st.success(f"Result: {res['score']}/{res['total']}")
+                for i, q in enumerate(res['details']):
+                    if res['answers'].get(i) != q.get('answer'):
+                        st.error(f"Q{i+1} Wrong. Correct: {q.get('answer')}. Expl: {q.get('explanation')}")
+                if st.button("Clear"):
+                    del st.session_state.last_res
                     st.rerun()
 
         with tab2:
-            user_sessions = database.get_student_sessions(user_name)
-            if user_sessions:
-                df = pd.DataFrame(user_sessions)
-                df['Session'] = [f"Session {i+1}" for i in range(len(df))]
-                st.write("### Accuracy Over Time (%)")
-                st.line_chart(df.set_index('Session')['accuracy'])
-                st.dataframe(df[['session_date', 'score', 'total', 'accuracy', 'time_taken']])
-            else:
-                st.info("Complete an AI Study Session to generate your progress chart.")
+            df = pd.DataFrame(database.get_student_sessions(user_name))
+            if not df.empty: 
+                st.line_chart(df['accuracy'])
+            else: 
+                st.info("No data.")
 
     elif role == "Teacher":
-        st.header(f"👨‍🏫 Teacher Dashboard: {user_name}")
+        st.header("👨‍🏫 Teacher Dashboard")
         tab1, tab2 = st.tabs(["Class Management", "Student Analytics"])
         
         with tab1:
-            class_name = st.text_input("Class Name")
-            if st.button("Create Class"):
-                code = database.create_class(class_name, user_name)
-                st.success(f"Class '{class_name}' created! Invite Code: **{code}**")
-                
+            name = st.text_input("Class Name")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                custom_code = st.text_input("Invite Code (Manual or Random)", key="class_code_input")
+            with col2:
+                st.write("")
+                st.write("")
+                st.button("Random Code", on_click=generate_random_code)
+
+            if st.button("Create"):
+                if not name or not custom_code:
+                    st.error("Please provide both Class Name and Invite Code.")
+                elif database.check_code_exists(custom_code):
+                    st.error(f"Invite code '{custom_code}' already exists! Please choose another one.")
+                else:
+                    database.create_class(name, user_name, custom_code)
+                    st.success(f"Class '{name}' created! Invite Code: {custom_code}")
+                    st.session_state.class_code_input = ""
+                    
             st.divider()
             st.write("### My Classes")
             my_classes = database.get_teacher_classes(user_name)
