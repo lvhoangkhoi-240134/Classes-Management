@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import ai_engine
+import database
 from datetime import datetime
 import io
 import PyPDF2
@@ -8,16 +9,12 @@ import docx
 
 st.set_page_config(page_title="LearnLoop", layout="wide", page_icon="📚")
 
-if 'session_history' not in st.session_state:
-    st.session_state.session_history = []
+database.init_db()
+
 if 'current_exam' not in st.session_state:
     st.session_state.current_exam = None
 if 'exam_start_time' not in st.session_state:
     st.session_state.exam_start_time = None
-if 'students' not in st.session_state:
-    st.session_state.students = []
-if 'classes' not in st.session_state:
-    st.session_state.classes = []
 
 def extract_text_from_file(uploaded_file):
     text = ""
@@ -45,8 +42,8 @@ def main():
         code = st.sidebar.text_input("Class Invite Code (Optional):")
         if st.sidebar.button("Login as Student"):
             if user_name:
-                if not any(s['name'] == user_name for s in st.session_state.students):
-                    st.session_state.students.append({"name": user_name, "code": code})
+                if code:
+                    database.enroll_student(user_name, code)
                 st.sidebar.success(f"Logged in as {user_name}")
             else:
                 st.sidebar.error("Please enter your name.")
@@ -71,7 +68,7 @@ def main():
                     if not api_key:
                         st.error("Missing Google Gemini API Key in the sidebar!")
                     else:
-                        with st.spinner(f"AI is analyzing your file and crafting {num_qs} questions... (This might take a minute)"):
+                        with st.spinner(f"AI is analyzing your file and crafting {num_qs} questions..."):
                             raw_text = extract_text_from_file(uploaded_file)
                             qs = ai_engine.generate_smart_mcqs(raw_text, num_qs, api_key)
                             
@@ -120,14 +117,7 @@ def main():
                             time_str = f"{int(minutes)}m {int(seconds)}s"
                             accuracy = (score / total) * 100 if total > 0 else 0
                             
-                            st.session_state.session_history.append({
-                                "student": user_name, 
-                                "session_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "accuracy": accuracy, 
-                                "score": score, 
-                                "total": total,
-                                "time_taken": time_str
-                            })
+                            database.save_session(user_name, accuracy, score, total, time_str)
                             
                             st.session_state.last_result = {
                                 "score": score, 
@@ -158,7 +148,7 @@ def main():
                     st.rerun()
 
         with tab2:
-            user_sessions = [s for s in st.session_state.session_history if s['student'] == user_name]
+            user_sessions = database.get_student_sessions(user_name)
             if user_sessions:
                 df = pd.DataFrame(user_sessions)
                 df['Session'] = [f"Session {i+1}" for i in range(len(df))]
@@ -175,25 +165,25 @@ def main():
         with tab1:
             class_name = st.text_input("Class Name")
             if st.button("Create Class"):
-                import random, string
-                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                st.session_state.classes.append({"name": class_name, "code": code})
+                code = database.create_class(class_name, user_name)
                 st.success(f"Class '{class_name}' created! Invite Code: **{code}**")
                 
             st.divider()
             st.write("### My Classes")
-            for c in st.session_state.classes:
+            my_classes = database.get_teacher_classes(user_name)
+            for c in my_classes:
                 st.info(f"🏫 **{c['name']}** | Invite Code: `{c['code']}`")
 
         with tab2:
-            if st.session_state.classes:
-                selected_class = st.selectbox("Select Class", [c['name'] for c in st.session_state.classes])
-                class_code = next((c['code'] for c in st.session_state.classes if c['name'] == selected_class), None)
+            my_classes = database.get_teacher_classes(user_name)
+            if my_classes:
+                selected_class = st.selectbox("Select Class", [c['name'] for c in my_classes])
+                class_code = next((c['code'] for c in my_classes if c['name'] == selected_class), None)
                 
-                enrolled_students = [s['name'] for s in st.session_state.students if s['code'] == class_code]
+                enrolled_students = database.get_students_in_class(class_code)
                 if enrolled_students:
                     selected_student = st.selectbox("Select Student", enrolled_students)
-                    student_sessions = [s for s in st.session_state.session_history if s['student'] == selected_student]
+                    student_sessions = database.get_student_sessions(selected_student)
                     if student_sessions:
                         df_t = pd.DataFrame(student_sessions)
                         df_t['Session'] = [f"Session {i+1}" for i in range(len(df_t))]
