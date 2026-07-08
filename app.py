@@ -14,6 +14,8 @@ if 'current_exam' not in st.session_state:
     st.session_state.current_exam = None
 if 'exam_start_time' not in st.session_state:
     st.session_state.exam_start_time = None
+if 'class_code_input' not in st.session_state:
+    st.session_state.class_code_input = ""
 
 def extract_text_from_file(uploaded_file):
     text = ""
@@ -129,7 +131,10 @@ def main():
                 else:
                     database.create_class(name, user_name, custom_code)
                     st.success(f"Class '{name}' created! Invite Code: {custom_code}")
-                    st.session_state.class_code_input = ""
+                    # XÓA KHỎI BỘ NHỚ VÀ RERUN TRANG LÀ CÁCH FIX SẠCH NHẤT
+                    if 'class_code_input' in st.session_state:
+                        del st.session_state['class_code_input']
+                    st.rerun()
                     
             st.divider()
             st.write("### My Classes")
