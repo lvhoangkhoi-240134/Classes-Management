@@ -1,7 +1,5 @@
 streamlit
-yfinance
 pandas
-numpy
 PyPDF2
 python-docx
-google-generativeai
+google-genai
