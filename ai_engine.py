@@ -1,11 +1,11 @@
-import google.generativeai as genai
+from google import genai
 import json
 import re
 
 def generate_smart_mcqs(text, num_questions, api_key):
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Khởi tạo Client theo cú pháp thư viện MỚI của Google
+        client = genai.Client(api_key=api_key)
         
         prompt = f"""
         Bạn là một chuyên gia giáo dục. Hãy tạo ra đúng {num_questions} câu hỏi trắc nghiệm (MCQ) khó từ văn bản này.
@@ -25,16 +25,20 @@ def generate_smart_mcqs(text, num_questions, api_key):
         {text[:15000]}
         """
         
-        response = model.generate_content(prompt)
+        # Gọi model bằng thư viện MỚI
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt
+        )
         raw_text = response.text.strip()
         
-        # Cứu tinh 1: Tìm đúng mảng JSON bằng Regex
+        # Lọc JSON bằng Regex
         json_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
         if json_match:
             json_text = json_match.group(0)
             data = json.loads(json_text)
             
-            # Cứu tinh 2: Ngăn chặn lỗi TypeError (string indices must be integers)
+            # Kiểm tra cấu trúc dữ liệu để tránh sập web
             if isinstance(data, list) and len(data) > 0:
                 if isinstance(data[0], str):
                     return {"error": "AI trả về mảng chuỗi thay vì mảng dữ liệu. Vui lòng thử lại với số lượng câu hỏi ít hơn."}
