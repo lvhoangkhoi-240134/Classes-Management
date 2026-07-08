@@ -60,7 +60,7 @@ def main():
         
         with tab1:
             if st.session_state.current_exam is None:
-                num_qs = st.selectbox("Number of Questions", [5, 10, 20])
+                num_qs = st.selectbox("Number of Questions", [5, 10, 20, 40, 100])
                 uploaded_file = st.file_uploader("Upload material", type=["txt", "pdf", "docx"])
                 
                 if uploaded_file and st.button("Start Exam"):
