@@ -8,7 +8,6 @@ import docx
 
 st.set_page_config(page_title="LearnLoop", layout="wide", page_icon="📚")
 
-
 if 'session_history' not in st.session_state:
     st.session_state.session_history = []
 if 'current_exam' not in st.session_state:
@@ -76,7 +75,6 @@ def main():
                             raw_text = extract_text_from_file(uploaded_file)
                             qs = ai_engine.generate_smart_mcqs(raw_text, num_qs, api_key)
                             
-                            
                             if isinstance(qs, dict) and "error" in qs:
                                 st.error(qs["error"])
                             elif isinstance(qs, list) and len(qs) > 0:
@@ -86,10 +84,9 @@ def main():
                             else:
                                 st.error("Unknown error occurred while generating questions.")
             else:
-                
                 exam_data = st.session_state.current_exam
                 if not isinstance(exam_data, list) or len(exam_data) == 0 or not isinstance(exam_data[0], dict):
-                    st.error("Dữ liệu câu hỏi bị lỗi cấu trúc. Vui lòng xóa bài này và Generate lại.")
+                    st.error("Question data structure is corrupted. Please clear and regenerate.")
                     if st.button("Clear Corrupted Session"):
                         st.session_state.current_exam = None
                         st.rerun()
@@ -98,7 +95,6 @@ def main():
                     with st.form("exam_form"):
                         user_answers = {}
                         for i, q in enumerate(exam_data):
-                            
                             st.markdown(f"**Q{i+1}:** {q.get('q', 'Error reading question')}")
                             options = q.get('options', [])
                             user_answers[i] = st.radio(
@@ -124,7 +120,6 @@ def main():
                             time_str = f"{int(minutes)}m {int(seconds)}s"
                             accuracy = (score / total) * 100 if total > 0 else 0
                             
-                            
                             st.session_state.session_history.append({
                                 "student": user_name, 
                                 "session_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -133,7 +128,6 @@ def main():
                                 "total": total,
                                 "time_taken": time_str
                             })
-                            
                             
                             st.session_state.last_result = {
                                 "score": score, 
@@ -145,7 +139,6 @@ def main():
                             st.session_state.current_exam = None
                             st.rerun()
 
-            
             if 'last_result' in st.session_state and st.session_state.current_exam is None:
                 res = st.session_state.last_result
                 st.success(f"### Exam Completed!\n**Score:** {res['score']}/{res['total']} | **Time Taken:** {res['time']}")
