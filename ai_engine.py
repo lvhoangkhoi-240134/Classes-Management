@@ -27,7 +27,7 @@ def generate_smart_mcqs(text, num_questions, api_key):
         
         # Gọi model bằng thư viện MỚI
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-1.5-flash-latest',
             contents=prompt
         )
         raw_text = response.text.strip()
