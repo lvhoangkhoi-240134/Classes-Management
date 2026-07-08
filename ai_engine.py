@@ -4,52 +4,48 @@ import re
 
 def generate_smart_mcqs(text, num_questions, api_key):
     try:
-        # Khởi tạo Client theo cú pháp thư viện MỚI của Google
         client = genai.Client(api_key=api_key)
         
         prompt = f"""
-        Bạn là một chuyên gia giáo dục. Hãy tạo ra đúng {num_questions} câu hỏi trắc nghiệm (MCQ) khó từ văn bản này.
-        Mỗi câu phải có 4 đáp án (A, B, C, D) và 1 giải thích chi tiết.
+        You are an educational expert. Create exactly {num_questions} difficult multiple-choice questions (MCQs) from the provided text.
+        Each question must have 4 options (A, B, C, D) and 1 detailed explanation.
         
-        BẮT BUỘC TRẢ VỀ ĐÚNG DẠNG JSON MẢNG (LIST) CHỨA CÁC OBJECT, KHÔNG THÊM TEXT BÊN NGOÀI:
+        YOU MUST RETURN ONLY A VALID JSON ARRAY OF OBJECTS, WITH NO ADDITIONAL TEXT OR MARKDOWN:
         [
           {{
-            "q": "Nội dung câu hỏi?", 
-            "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"], 
-            "answer": "A. Đáp án 1", 
-            "explanation": "Giải thích chi tiết..."
+            "q": "Question text here?", 
+            "options": ["A. Option 1", "B. Option 2", "C. Option 3", "D. Option 4"], 
+            "answer": "A. Option 1", 
+            "explanation": "Detailed explanation here..."
           }}
         ]
         
-        Văn bản bài học: 
+        Text material: 
         {text[:15000]}
         """
         
-        # Gọi model bằng thư viện MỚI
         response = client.models.generate_content(
-            model='gemini-3.5-flash',
+            model='gemini-1.5-flash',
             contents=prompt
         )
         raw_text = response.text.strip()
         
-        # Lọc JSON bằng Regex
         json_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
         if json_match:
             json_text = json_match.group(0)
             data = json.loads(json_text)
             
-            # Kiểm tra cấu trúc dữ liệu để tránh sập web
             if isinstance(data, list) and len(data) > 0:
                 if isinstance(data[0], str):
-                    return {"error": "AI trả về mảng chuỗi thay vì mảng dữ liệu. Vui lòng thử lại với số lượng câu hỏi ít hơn."}
+                    return {"error": "AI returned an array of strings instead of objects. Please try again with fewer questions."}
                 elif isinstance(data[0], dict):
-                    return data # Trả về mảng chuẩn
+                    return data 
             
-            return {"error": "Cấu trúc dữ liệu AI trả về không hợp lệ."}
+            return {"error": "Invalid data structure returned by AI."}
         else:
-            return {"error": "Không tìm thấy định dạng JSON trong câu trả lời của AI."}
+            return {"error": "Could not find JSON format in AI response."}
 
     except json.JSONDecodeError:
-         return {"error": "AI trả về JSON bị lỗi cú pháp. Vui lòng Generate lại."}
+         return {"error": "AI returned malformed JSON. Please generate again."}
     except Exception as e:
-        return {"error": f"Lỗi hệ thống AI: {str(e)}"}
+        return {"error": f"AI System Error: {str(e)}"}
