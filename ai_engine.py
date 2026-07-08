@@ -25,7 +25,7 @@ def generate_smart_mcqs(text, num_questions, api_key):
         """
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=prompt
         )
         raw_text = response.text.strip()
