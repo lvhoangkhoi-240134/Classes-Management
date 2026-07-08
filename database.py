@@ -1,6 +1,4 @@
 import sqlite3
-import random
-import string
 from datetime import datetime
 
 def get_connection():
@@ -23,14 +21,20 @@ def init_db():
     conn.commit()
     conn.close()
 
-def create_class(name, teacher_name):
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+def check_code_exists(code):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM classes WHERE invite_code=?", (code,))
+    exists = c.fetchone() is not None
+    conn.close()
+    return exists
+
+def create_class(name, teacher_name, code):
     conn = get_connection()
     c = conn.cursor()
     c.execute("INSERT INTO classes (name, invite_code, teacher_name) VALUES (?, ?, ?)", (name, code, teacher_name))
     conn.commit()
     conn.close()
-    return code
 
 def get_teacher_classes(teacher_name):
     conn = get_connection()
