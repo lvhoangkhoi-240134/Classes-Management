@@ -7,17 +7,16 @@ def generate_smart_mcqs(text, num_questions, api_key):
         client = genai.Client(api_key=api_key)
         
         prompt = f"""
-        You are an educational expert. Create exactly {num_questions} difficult multiple-choice questions (MCQs) from the provided text.
-        Each question must have 4 options (A, B, C, D) and 1 detailed explanation.
+        You are an expert academic tutor. Extract deep conceptual knowledge from the text.
+        CRITICAL RULES:
+        1. DO NOT reference slides, images, or document structure.
+        2. Focus on core concepts, logic, and cause-and-effect.
+        3. Create {num_questions} difficult multiple-choice questions.
+        4. Each question must have 4 options and a detailed explanation.
         
-        YOU MUST RETURN ONLY A VALID JSON ARRAY OF OBJECTS, WITH NO ADDITIONAL TEXT OR MARKDOWN:
+        RETURN ONLY A VALID JSON ARRAY OF OBJECTS, WITH NO ADDITIONAL TEXT OR MARKDOWN:
         [
-          {{
-            "q": "Question text here?", 
-            "options": ["A. Option 1", "B. Option 2", "C. Option 3", "D. Option 4"], 
-            "answer": "A. Option 1", 
-            "explanation": "Detailed explanation here..."
-          }}
+          {{"q": "Question text?", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A. ...", "explanation": "..."}}
         ]
         
         Text material: 
