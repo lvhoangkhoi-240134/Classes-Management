@@ -1,4 +1,4 @@
-# 🚀 FUNCTIONAL SYSTEM SPECIFICATION: LEARNLOOP (LMS & AI Engine)
+# 🚀 FUNCTIONAL SYSTEM SPECIFICATION: LEARNLOOP (Homework & Practice LMS)
 **Target Audience:** Full-Stack Engineers, System Architects, Product Managers.
 **Focus:** Core features, business logic, data flow, validation rules, and system behavior. UI/UX styling is explicitly excluded.
 
@@ -6,18 +6,18 @@
 
 ## 1. SYSTEM ARCHITECTURE & CORE WORKFLOWS
 
-### 1.1. AI Processing Pipeline (The Core Engine)
-1. **Ingestion:** System receives raw files (PDF/DOCX/TXT) or raw text via `multipart/form-data`.
+### 1.1. AI Processing Pipeline (Dual-Use Engine)
+1. **Ingestion:** System receives raw files (PDF/DOCX/TXT) via `multipart/form-data`.
 2. **Extraction:** Backend parses the document using native Python libraries (`PyPDF2`, `python-docx`) to extract UTF-8 text.
-3. **Chunking & Tokenization:** If text exceeds Gemini's context window, it is chunked. 
-4. **Prompt Injection:** Text is wrapped in a strict system prompt enforcing a predefined JSON schema.
-5. **Validation:** The AI response is intercepted. The backend attempts to `json.loads()`. If it fails (malformed JSON), a regex cleanup is triggered, or an automatic retry is initiated.
-6. **Persistence:** Validated JSON is mapped to the `Quizzes` table in the database.
+3. **Prompt Injection:** Text is wrapped in a strict system prompt enforcing a predefined JSON schema.
+4. **Validation:** Backend intercepts AI response. Attempts `json.loads()`. Triggers auto-retry on malformed JSON.
+5. **Persistence (Teacher Flow):** JSON mapped to `Assignments` table for manual review and editing.
+6. **Ephemeral Execution (Student Flow):** JSON mapped directly to a temporary `SelfStudy_Sessions` table for immediate practice bypassing the edit phase.
 
 ### 1.2. Authentication & Authorization Lifecycle
-*   **Method:** Stateless JWT (JSON Web Tokens) stored in HTTP-only cookies or secure LocalStorage.
-*   **Restriction:** Closed institutional system. No Third-Party SSO (Google/Facebook) is permitted.
-*   **Role-Based Access Control (RBAC):** Every API endpoint requires a dependency check (`get_current_user`). Actions are blocked with `403 Forbidden` if a Student attempts to hit a Teacher endpoint.
+*   **Method:** Stateless JWT stored in HTTP-only cookies or secure LocalStorage.
+*   **Restriction:** Closed institutional system. No Third-Party SSO permitted.
+*   **Role-Based Access Control (RBAC):** Strictly enforced via backend middleware. `get_current_user` validates roles (Teacher vs. Student).
 
 ---
 
@@ -26,139 +26,121 @@
 ### MODULE A: INSTITUTIONAL ONBOARDING & AUTHENTICATION
 
 #### Screen 1: System Landing Page & Entry Routing
-*   **Function:** Initial entry point routing users based on intent and session state.
-*   **Business Logic:**
-    *   System checks for existing valid JWT token on load.
-    *   If valid token exists: Decode payload -> redirect to `/teacher/dashboard` or `/student/dashboard` based on `role`.
-    *   If no token: Display Institutional Call-to-Actions (CTA).
-*   **Interactive Elements:**
-    *   `Button: Teacher Portal`: Redirects to Registration/Login (Role pre-set to Teacher).
-    *   `Button: Student Portal`: Redirects to Registration/Login (Role pre-set to Student).
+*   **Function:** Initial entry point. Routes users based on session state.
+*   **Business Logic:** Decodes valid JWT -> redirects to respective dashboard. If none, displays CTA.
+*   **Interactive Elements:** `Button: Teacher Portal`, `Button: Student Portal`.
 
 #### Screen 2: Institutional Registration System
-*   **Function:** Account creation heavily restricted to verified school personnel and students.
 *   **Input Fields & Validation Rules:**
-    *   `Role Selector`: Radio group (Teacher/Student). Mandatory.
-    *   `Institution Code`: String. A pre-defined database of valid school codes (e.g., "RMIT_VN", "HUST_01"). Rejects registration if the code is invalid.
-    *   `Full Name`: String. Min 2, Max 50 characters.
-    *   `Institutional Email`: Must match regex for `.edu` domains or authorized school domains. Personal emails (`@gmail.com`) trigger a `400 Bad Request` ("Please use your school-issued email").
-    *   `Student/Staff ID`: Alphanumeric. Must be unique within the Institution Code.
-    *   `Password`: Minimum 8 characters, at least 1 uppercase, 1 number.
-    *   `Confirm Password`: Must strictly match `Password`.
-*   **Action Behaviors:**
-    *   `Button: Create Account`: Dispatches `POST /api/auth/register`. 
-    *   **Success State:** Auto-generates JWT, logs user in, redirects to Dashboard.
+    *   `Role Selector`: Radio group (Teacher/Student).
+    *   `Institution Code`: Matches DB of valid school codes (e.g., "RMIT_VN").
+    *   `Full Name`, `Institutional Email` (Regex enforced `.edu`), `Student/Staff ID`.
+    *   `Password` (Min 8 chars, 1 uppercase, 1 number), `Confirm Password`.
+*   **Action Behaviors:** `Button: Create Account` -> Dispatches `POST /api/auth/register`.
 
-#### Screen 3: Login & Session Management
-*   **Function:** Authenticates existing institutional users.
-*   **Input Fields & Validation Rules:**
-    *   `Institutional Email`: Required.
-    *   `Password`: Required.
-*   **Action Behaviors:**
-    *   `Button: Login`: Dispatches `POST /api/auth/login`. 
-    *   **Error State 1:** If email not found -> "Account does not exist."
-    *   **Error State 2:** If password incorrect -> "Invalid credentials."
-    *   **Security Measure:** Rate limiting applied (max 5 failed attempts per 15 mins to prevent brute force).
-
-#### Screen 4: Password Recovery
-*   **Function:** Secure account recovery workflow.
-*   **Action Behaviors:** User inputs School Email. Backend verifies existence. If true, generates a secure password reset link sent to the school email via SMTP.
+#### Screen 3: Login & Password Recovery
+*   **Function:** Secure login & SMTP-based password reset for institutional emails.
+*   **Security:** Rate-limiting applied to prevent brute-force attacks.
 
 ---
 
-### MODULE B: TEACHER WORKSPACE
+### MODULE B: TEACHER WORKSPACE (Course & Homework Management)
 
-#### Screen 5: Teacher Global Dashboard
-*   **Function:** High-level overview of the teacher's ecosystem.
-*   **Data Aggregation Widgets:**
-    *   `Total Active Classes`: `COUNT(id)` from `Classes` where `teacher_id = current_user.id`.
-    *   `Total Students`: Count of unique `student_id` in `Enrollments` across all teacher's classes.
-    *   `Recent Activity Feed`: Fetches top 5 recent `Sessions` (student quiz submissions).
-*   **Action Behaviors:**
-    *   `Button: Create Quick Class`: Opens modal to input Class Name. Auto-generates a unique 6-character alphanumeric `invite_code`. Inserts into `Classes` table.
-
-#### Screen 6: Class Roster & Settings Manager
-*   **Function:** Deep dive into a specific class's configuration.
+#### Screen 4: Teacher Global Dashboard & Subject Manager
+*   **Function:** High-level ecosystem overview and Subject management.
+*   **Data Aggregation Widgets:** `Total Active Courses`, `Pending Submissions`, `Recent Activity Feed`.
 *   **Interactive Elements:**
-    *   `Input: Class Name`: Editable field. Updates `Classes` table on blur.
-    *   `Button: Regenerate Invite Code`: Invalidates old code, generates a new 6-character string, updates DB.
-    *   `Data Table: Enrolled Students`: Lists `Student ID`, `Full Name`, `School Email`.
-    *   `Button: Remove Student`: Hard deletes the record from `Enrollments`. (Cascading rule: Does NOT delete the student's past quiz `Sessions`).
+    *   `Button: Create New Course`: Opens modal (Input: Course Name, Subject Tag, Semester). Auto-generates a 6-char `invite_code`.
+    *   `List: My Courses`: Clickable cards navigating to Screen 5.
 
-#### Screen 7: Quiz Bank / Assessment Hub
-*   **Function:** Central repository of all quizzes created by the teacher.
-*   **Data Display:** Paginated list of quizzes. Columns: `Title`, `Target Class`, `Question Count`, `Creation Date`, `Status`.
+#### Screen 5: Course Roster & Settings Manager
+*   **Function:** Deep dive into a specific course's configuration.
 *   **Interactive Elements:**
-    *   `Search Bar`: Triggers `GET /api/quizzes?search=query` to filter by title.
-    *   `Button: Delete Quiz`: Triggers soft-delete (updates `is_deleted = True`) to preserve historical student data.
-    *   `Button: Launch AI Studio`: Redirects to the AI generation pipeline (Screen 8).
+    *   `Button: Regenerate Invite Code`: Invalidates old code for security.
+    *   `Data Table: Enrolled Students`: Lists ID, Name, Email.
+    *   `Button: Remove Student`: Hard deletes from `Enrollments` (preserves historical grades).
 
-#### Screen 8: AI Studio (Step 1) - Data Ingestion
-*   **Function:** Captures source material for the AI.
+#### Screen 6: Assignment Bank
+*   **Function:** Central repository of homework and practice sets.
+*   **Data Display:** Paginated list. Columns: `Title`, `Target Course`, `Deadline`, `Status`.
+*   **Interactive Elements:**
+    *   `Search Bar`: Triggers `GET /api/assignments?search=query`.
+    *   `Button: Create from Scratch`: Opens Screen 8 in Manual Mode (No AI).
+    *   `Button: Generate with AI Studio`: Redirects to Screen 7.
+
+#### Screen 7: Teacher AI Studio (Data Ingestion)
+*   **Function:** Captures source material for AI homework generation.
 *   **Input Fields & Validation Rules:**
-    *   `File Uploader`: Accepts `.txt, .pdf, .docx`. Max file size: 10MB. File is parsed in-memory, NOT saved to physical storage.
-    *   `Text Area (Alternative)`: Manual text paste. Max 50,000 characters.
+    *   `File Uploader`: Accepts `.txt, .pdf, .docx` (Max 10MB).
     *   `Slider: Question Count`: Integer from 5 to 50.
-*   **Action Behaviors:**
-    *   `Button: Analyze & Generate`: Dispatches raw text and question count to `POST /api/ai/generate`. UI enters an un-dismissable Loading State preventing duplicate submissions.
+    *   `Dropdown: Difficulty Level`: Select (Basic Recall, Comprehension, Application).
+*   **Action Behaviors:** `Button: Analyze & Generate` -> UI enters un-dismissable Loading State.
 
-#### Screen 9: AI Studio (Step 2) - QA & Editing
-*   **Function:** Human-in-the-loop validation of AI output.
-*   **Data Binding:** Renders the JSON array returned by Gemini into a list of editable blocks.
+#### Screen 8: Assignment Editor (QA & Manual Edit)
+*   **Function:** Human-in-the-loop editing. Supports both AI-generated arrays and manual creation from scratch.
 *   **Interactive Elements (Per Question Block):**
-    *   `Input: Question Stem`: Editable string.
-    *   `Inputs: Options A/B/C/D`: Editable strings.
-    *   `Dropdown: Correct Answer`: Forces teacher to select which option is the key.
-    *   `Textarea: AI Explanation`: Editable string. Allows teacher to refine the AI's reasoning.
-    *   `Button: Delete/Add Question`: Modifies the JSON array.
-*   **Action Behaviors:**
-    *   `Button: Save as Draft`: Serializes DOM state to JSON, saves to `Quizzes` with `status='draft'`.
-    *   `Button: Publish to Class`: Saves JSON, updates `status='published'`, making it immediately queryable by enrolled students.
+    *   `Input: Question Stem`, `Inputs: Options A/B/C/D`, `Dropdown: Correct Answer`.
+    *   `Textarea: AI/Teacher Explanation`: Editable rationale for the answer.
+    *   `Button: Add Blank Question`: Appends an empty block for manual input.
+    *   `Button: Delete Question`.
+*   **Publishing Actions:**
+    *   `Input: Deadline Picker`: Sets a strict due date (Timestamp).
+    *   `Button: Publish to Course`: Updates DB status, makes assignment visible to students.
 
-#### Screen 10: Performance Analytics & Reporting
-*   **Function:** Statistical breakdown of student performance per quiz.
-*   **Input Filters:** Dropdown (Select Class) -> Dropdown (Select Quiz).
+#### Screen 9: Deep Analytics & Item Analysis
+*   **Function:** Evaluates student understanding and material suitability.
 *   **Data Rendered:**
-    *   `Average Score`: Arithmetic mean of all `score` values in `Sessions`.
-    *   `Student Table`: Lists all students, absolute score, percentage, and submission timestamp.
-    *   `Action: Export to CSV`: Compiles data table into a `.csv` file for offline school grading systems.
+    *   `Metric: Class Average Score` & `Metric: Submission Rate`.
+    *   `Widget: Item Analysis (Difficult Questions)`: Flags questions where >50% of the class answered incorrectly. Highlights which wrong option was most chosen to identify common misconceptions.
+    *   `Student Table`: Lists absolute scores, time taken, and submission timestamp.
+    *   `Action: Export to CSV` for gradebooks.
 
 ---
 
-### MODULE C: STUDENT WORKSPACE
+### MODULE C: STUDENT WORKSPACE (Practice & Self-Study)
 
-#### Screen 11: Student Global Dashboard
-*   **Function:** The student's hub for active assignments.
+#### Screen 10: Student Global Dashboard & Calendar
+*   **Function:** Hub for active assignments and time management.
 *   **Data Aggregation:**
-    *   `Section: Pending Tasks`: Queries `Quizzes` mapped to `Enrollments` where `quiz_id` does NOT exist in the student's `Sessions`.
-    *   `Section: Completed Tasks`: Queries `Sessions` for this student.
-*   **Action Behaviors:**
-    *   `Input: Invite Code`: Text input for 6-character class code.
-    *   `Button: Join Class`: Dispatches `POST /api/enroll`. Checks if code exists. Inserts into `Enrollments`.
+    *   `Input: Invite Code` + `Button: Join Course`.
+    *   `Widget: Upcoming Deadlines`: Chronological list of pending assignments mapping to `Assignments.deadline`. Visually flags "Due in 24h" in red.
+    *   `Widget: Course Overview`: List of enrolled courses.
 
-#### Screen 12: Specific Class View
-*   **Function:** Displays workload scoped to a single class.
-*   **Data Display:** 
-    *   List of published Quizzes for this specific `class_id`.
-    *   Status indicators: "To Do" (Clickable -> Starts Exam) vs "Completed" (Clickable -> Views Score).
+#### Screen 11: Specific Course View
+*   **Function:** Workload scoped to a single course.
+*   **Data Display:**
+    *   List of Assignments. Status indicators: "To Do" vs "Completed".
+    *   `Button: Start Practice`: Proceeds to Screen 12.
 
-#### Screen 13: Live Assessment Environment (Exam Room)
-*   **Function:** Execution of the quiz.
-*   **Initialization Logic:** Fetches `quiz_data` (JSON) from Backend. Randomizes option order client-side to prevent cheating.
+#### Screen 12: Practice Environment (Homework Execution)
+*   **Function:** Low-stakes execution of homework.
+*   **Initialization Logic:** Randomizes option order client-side.
 *   **Interactive Elements & Rules:**
-    *   `Radio Group: Options`: Only one selection allowed per question.
-    *   `State Management`: Selected answers are written to browser `localStorage` on every click (Key: `draft_quiz_{id}`). Reloading hydrates the form.
-    *   `Button: Submit Exam`: 
-        *   *Validation:* Checks if array length of answers equals total questions. Triggers Warning Modal if incomplete.
-*   **Data Submission:** Dispatches `POST /api/sessions/submit` with `{student_id, quiz_id, answers_array, time_taken}`.
+    *   `Radio Group: Options`: One selection per question.
+    *   `State Management`: Answers auto-saved to browser `localStorage` on click to prevent data loss.
+    *   `Button: Submit Homework`: Triggers validation check for unanswered questions. Dispatches `POST /api/sessions/submit`.
 
-#### Screen 14: Automated Grading & AI Tutoring View
-*   **Function:** Real-time feedback, grading, and conceptual correction.
-*   **Calculation Logic (Backend):** Iterates through submitted `answers_array`, compares with the `answer` key in `quiz_data`. Calculates `total_correct` and `accuracy_percentage`. Saves to `Sessions` table.
+#### Screen 13: Review & AI Tutoring View
+*   **Function:** Real-time grading and conceptual correction.
 *   **UI Data Binding (Read-Only):**
-    *   `Score Header`: Displays final calculated score (e.g., "8/10").
-    *   `Question Review Loop`: Renders every question.
-        *   If Correct: UI highlights the user's choice.
-        *   If Incorrect: UI highlights the user's wrong choice negatively, highlights the correct key positively.
-    *   `AI Tutoring Block`: Directly binds the `explanation` string below every question, explaining *why* the answer is correct based on the school document.
-    *   `Button: Back to Dashboard`: Clears `localStorage` draft.
+    *   `Score Header`: Displays final score.
+    *   `Question Review Loop`: Highlights user's choice vs. correct answer.
+    *   `AI Tutoring Block`: Binds the `explanation` string directly below the question, clarifying *why* the answer is correct for immediate learning.
+
+---
+
+### MODULE D: STUDENT SELF-STUDY STUDIO (Personal Practice)
+
+#### Screen 14: Self-Study Ingestion
+*   **Function:** Allows students to upload their own notes to generate quick practice tests for exam revision.
+*   **Input Fields:**
+    *   `File Uploader`: Drag & drop personal study materials.
+    *   `Slider: Question Count`.
+*   **Action Behaviors:** `Button: Generate Quick Practice`. Dispatches payload to AI Engine.
+
+#### Screen 15: Instant Practice Mode
+*   **Function:** Bypasses the Teacher's "Edit" phase. The AI output is instantly rendered as an interactive quiz for the student.
+*   **Business Logic:** 
+    *   Upon generation, immediately loads a view identical to Screen 12. 
+    *   Upon submission, routes to Screen 13 for AI explanations.
+    *   Data is saved to a separate `Personal_Study_History` table, NOT visible to the teacher, ensuring privacy in self-study.
