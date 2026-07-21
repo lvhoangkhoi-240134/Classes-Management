@@ -28,31 +28,34 @@
 #### Screen 1: System Landing Page & Entry Routing
 *   **Function:** Initial entry point. Routes users based on session state.
 *   **Business Logic:** Decodes valid JWT -> redirects to respective dashboard. If none, displays CTA.
+*   **Interactive Elements:** `Button: Teacher Portal`, `Button: Student Portal`.
 
 #### Screen 2: Institutional Registration System
 *   **Input Fields & Validation Rules:**
     *   `Role Selector`: Radio group (Teacher/Student).
-    *   `Institution Code`: Matches DB of valid school codes.
-    *   `Institutional Email`, `Student/Staff ID`, `Password`.
-*   **Action Behaviors:** Dispatches `POST /api/auth/register`.
+    *   `Institution Code`: Matches DB of valid school codes (e.g., "RMIT_VN").
+    *   `Full Name`, `Institutional Email` (Regex enforced `.edu`), `Student/Staff ID`.
+    *   `Password` (Min 8 chars, 1 uppercase, 1 number), `Confirm Password`.
+*   **Action Behaviors:** `Button: Create Account` -> Dispatches `POST /api/auth/register`.
 
 #### Screen 3: Login & Password Recovery
 *   **Function:** Secure login & SMTP-based password reset for institutional emails.
+*   **Security:** Rate-limiting applied to prevent brute-force attacks.
 
 ---
 
 ### MODULE B: TEACHER WORKSPACE (Course & Homework Management)
-*   **Global Layout Rule:** Left Sidebar Navigation required for all screens in this module.
+*   **Global Layout Rule:** Left Sidebar Navigation (`Dashboard`, `Courses`, `Assignment Bank`, `AI Studio`, `Analytics`) is persistent across this module.
 
 #### Screen 4: Teacher Global Dashboard (The Entry Point)
 *   **Function:** High-level ecosystem overview and schedule management.
 *   **Data Aggregation Widgets:**
-    *   `Widget: Color-Coded Teaching Calendar`: A weekly/monthly calendar view visualizing the teacher's schedule (e.g., upcoming classes, lectures).
+    *   `Widget: Color-Coded Teaching Calendar`: A weekly/monthly calendar view visualizing the teacher's schedule.
     *   `Widget: Global Metrics`: Total Active Courses, System-wide Pending Submissions.
-    *   `Widget: AI Insights`: High-level alerts (e.g., "Students are struggling with Module 4").
+    *   `Widget: AI Insights`: High-level alerts (e.g., "Students in CS101 are struggling with Module 4").
 
 #### Screen 5: Course Hub (Subject Entry Screen)
-*   **Function:** Central directory for all subjects taught by the teacher. Accessed via "Courses" in the sidebar.
+*   **Function:** Central directory for all subjects taught by the teacher.
 *   **Data Display:** 
     *   Grid/List of `Course Cards`.
     *   `Button: Create New Course`: Opens modal to generate a new course and `invite_code`.
@@ -62,68 +65,103 @@
 *   **Function:** Deep dive into a specific course's configuration.
 *   **Interactive Elements:**
     *   `Badge`: Course Invite Code (with Regenerate button).
-    *   `Data Table: Enrolled Students`: Lists ID, Name, Email. Includes "Remove Student" action.
+    *   `Data Table: Enrolled Students`: Lists ID, Name, Email. Includes "Remove Student" action (preserves historical grades).
 
 #### Screen 7: Assignment Bank (Filtered Entry Screen)
-*   **Function:** Central repository of homework. Accessed via sidebar.
-*   **Data Display:** Mandatory `Course Filter` dropdown or folder-based structure. Users must select a course before viewing the paginated list of assignments (`Title`, `Deadline`, `Status`).
+*   **Function:** Central repository of homework.
+*   **Data Display:** Mandatory `Course Filter` dropdown. Users must select a course before viewing the paginated list of assignments (`Title`, `Deadline`, `Status`).
 *   **Interactive Elements:**
     *   `Button: Create from Scratch` (Routes to Screen 9).
     *   `Button: Generate with AI Studio` (Routes to Screen 8).
 
-#### Screen 8: Teacher AI Studio (Data Ingestion)
+#### Screen 8: Teacher AI Studio (Data Ingestion Entry)
 *   **Function:** Captures source material for AI homework generation.
-*   **Input Fields:** `File Uploader`, `Question Count Slider`, `Difficulty Level Dropdown`.
+*   **Input Fields & Validation Rules:**
+    *   `File Uploader`: Accepts `.txt, .pdf, .docx` (Max 10MB).
+    *   `Slider: Question Count`: Integer from 5 to 50.
+    *   `Dropdown: Difficulty Level`: Select (Basic Recall, Comprehension, Application).
+*   **Action Behaviors:** `Button: Analyze & Generate` -> UI enters un-dismissable Loading State.
 
 #### Screen 9: Assignment Editor (QA & Manual Edit)
-*   **Function:** Human-in-the-loop editing.
-*   **Interactive Elements:** Question Stem, Options A/B/C/D, Correct Answer dropdown, AI Explanation textarea.
-*   **Publishing Actions:** `Deadline Picker`, `Button: Publish to Course`.
+*   **Function:** Human-in-the-loop editing. Supports both AI-generated arrays and manual creation from scratch.
+*   **Interactive Elements (Per Question Block):**
+    *   `Input: Question Stem`, `Inputs: Options A/B/C/D`, `Dropdown: Correct Answer`.
+    *   `Textarea: AI/Teacher Explanation`: Editable rationale for the answer.
+    *   `Button: Add Blank Question`: Appends an empty block for manual input.
+    *   `Button: Delete Question`.
+*   **Publishing Actions:**
+    *   `Input: Deadline Picker`: Sets a strict due date (Timestamp).
+    *   `Button: Publish to Course`: Updates DB status, makes assignment visible to students.
 
-#### Screen 10: Deep Analytics & Item Analysis
-*   **Function:** Evaluates student understanding and material suitability.
-*   **Data Rendered:** `Class Average Score`, `Item Analysis` (flags high-failure questions), `Export to CSV`.
+#### Screen 10: Analytics Hub (Reporting Entry Screen)
+*   **Function:** The gateway to all reporting and statistics.
+*   **Data Aggregation Widgets:** `Global Class Averages`, `Top Performing Courses`.
+*   **Interactive Elements:**
+    *   `Dropdown 1: Select Course` (Mandatory).
+    *   `Dropdown 2: Select Assignment` (Cascades from Dropdown 1).
+*   **Action Behaviors:** `Button: Generate Report` routes to Screen 11.
+
+#### Screen 11: Deep Analytics & Item Analysis (Detail Screen)
+*   **Function:** Evaluates student understanding and material suitability for a specific assignment.
+*   **Data Rendered:**
+    *   `Metric: Assignment Average Score` & `Submission Rate`.
+    *   `Widget: Item Analysis`: Flags questions where >50% of the class answered incorrectly. Highlights which wrong option was most chosen to identify common misconceptions.
+    *   `Data Table: Student Grades`: Lists absolute scores, time taken, and submission timestamp.
+    *   `Action: Export to CSV` for gradebooks.
 
 ---
 
-### MODULE C: STUDENT WORKSPACE (Practice & Self-Study)
-*   **Global Layout Rule:** Strict Left Sidebar Navigation (Mirroring Teacher Workspace for UI consistency).
+### MODULE C: STUDENT WORKSPACE (Practice & Coursework)
+*   **Global Layout Rule:** Left Sidebar Navigation (`Dashboard`, `Courses`, `Self-Study`) mirroring the Teacher workspace for consistency.
 
-#### Screen 11: Student Global Dashboard (The Entry Point)
+#### Screen 12: Student Global Dashboard (The Entry Point)
 *   **Function:** Hub for time management and overview.
 *   **Data Aggregation Widgets:**
     *   `Widget: Master Calendar`: Color-coded calendar showing class schedules and assignment deadlines.
-    *   `Widget: Upcoming Deadlines`: List of tasks due within 24-48 hours.
+    *   `Widget: Upcoming Deadlines`: Chronological list of tasks. Visually flags "Due in 24h" in red.
     *   `Widget: AI Study Recommendations`: Data-driven insights based on recent performance.
 
-#### Screen 12: Course Hub (Student Entry Screen)
-*   **Function:** Directory of enrolled subjects. Accessed via "Courses" in the sidebar.
+#### Screen 13: Course Hub (Student Entry Screen)
+*   **Function:** Directory of enrolled subjects.
 *   **Interactive Elements:**
     *   `Input: Invite Code` + `Button: Join Course`.
     *   Grid/List of Enrolled `Course Cards` (Displays progress bars).
-*   **Action Behaviors:** Clicking a Course Card routes to Screen 13.
+*   **Action Behaviors:** Clicking a Course Card routes to Screen 14.
 
-#### Screen 13: Course Detail (Assignments View)
+#### Screen 14: Course Detail (Assignments View)
 *   **Function:** Workload scoped to a single course.
 *   **Data Display:** List of Assignments categorized by "To Do" vs "Completed".
-*   **Action Behaviors:** `Button: Start Practice` routes to Screen 14.
+*   **Action Behaviors:** `Button: Start Practice` routes to Screen 15.
 
-#### Screen 14: Practice Environment (Homework Execution)
+#### Screen 15: Practice Environment (Homework Execution)
 *   **Function:** Low-stakes execution of homework.
-*   **Rules:** Auto-saves to `localStorage` on click. Triggers validation check on submit.
+*   **Initialization Logic:** Randomizes option order client-side.
+*   **Interactive Elements & Rules:**
+    *   `Radio Group: Options`: One selection per question.
+    *   `State Management`: Answers auto-saved to browser `localStorage` on click to prevent data loss.
+    *   `Button: Submit Homework`: Triggers validation check for unanswered questions. Dispatches `POST /api/sessions/submit`.
 
-#### Screen 15: Review & AI Tutoring View
+#### Screen 16: Review & AI Tutoring View
 *   **Function:** Real-time grading and conceptual correction.
-*   **Data Display:** Highlights Correct/Wrong answers. Binds the `AI Tutoring Explanation` below each question.
+*   **UI Data Binding (Read-Only):**
+    *   `Score Header`: Displays final score.
+    *   `Question Review Loop`: Highlights user's choice vs. correct answer.
+    *   `AI Tutoring Block`: Binds the `explanation` string directly below the question, clarifying *why* the answer is correct for immediate learning.
 
 ---
 
 ### MODULE D: STUDENT SELF-STUDY STUDIO (Personal Practice)
-*   **Global Layout Rule:** Accessed via dedicated sidebar tab.
 
-#### Screen 16: Self-Study Ingestion
-*   **Function:** Allows students to upload personal notes for exam revision.
-*   **Input Fields:** `File Uploader`, `Question Count Slider`.
+#### Screen 17: Self-Study Ingestion (Entry Screen)
+*   **Function:** Allows students to upload their own notes to generate quick practice tests for exam revision without teacher intervention.
+*   **Input Fields:**
+    *   `File Uploader`: Drag & drop personal study materials.
+    *   `Slider: Question Count`.
+*   **Action Behaviors:** `Button: Generate Quick Practice`. Dispatches payload to AI Engine.
 
-#### Screen 17: Instant Practice Mode
-*   **Function:** Bypasses Teacher editing. AI output is instantly rendered as a practice test. Saves to isolated `Personal_Study_History` table.
+#### Screen 18: Instant Practice Mode
+*   **Function:** Bypasses the Teacher's "Edit" phase. The AI output is instantly rendered as an interactive quiz for the student.
+*   **Business Logic:** 
+    *   Upon generation, immediately loads a view functionally identical to Screen 15. 
+    *   Upon submission, routes to Screen 16 for AI explanations.
+    *   Data is saved to a separate `Personal_Study_History` table, NOT visible to the teacher, ensuring privacy in self-study.
