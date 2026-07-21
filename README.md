@@ -1,4 +1,4 @@
-# 🚀 FUNCTIONAL SYSTEM SPECIFICATION: LEARNLOOP (Homework & Practice LMS)
+#  FUNCTIONAL SYSTEM SPECIFICATION: LEARNLOOP (Homework & Practice LMS)
 **Target Audience:** Full-Stack Engineers, System Architects, Product Managers.
 **Focus:** Core features, business logic, data flow, validation rules, and system behavior. UI/UX styling is explicitly excluded.
 
